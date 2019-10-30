@@ -676,7 +676,8 @@ try_up_instance(vrrp_t *vrrp, bool leaving_init)
 
 		if (vrrp->saddr.ss_family == AF_INET) {
 			ipaddress.u.sin.sin_addr.s_addr = ((struct sockaddr_in *)&vrrp->saddr)->sin_addr.s_addr;
-			send_gratuitous_arp_immediate(ipaddress.ifp, &ipaddress);
+			/* send_gratuitous_arp_immediate(ipaddress.ifp, &ipaddress); */
+			send_gratuitous_arp(&ipaddress);
 		} else {
 			/* IPv6 */
 			ipaddress.u.sin6_addr = ((struct sockaddr_in6 *)&vrrp->saddr)->sin6_addr;
@@ -1229,7 +1230,8 @@ vrrp_arpna_send(vrrp_t *vrrp, list l, timeval_t *n)
 		/* IPv4 handling */
 		if (!IP_IS6(ipaddress)) {
 			if (timercmp(&time_now, &ifp->garp_delay->garp_next_time, >=)) {
-				send_gratuitous_arp_immediate(ifp, ipaddress);
+				/* send_gratuitous_arp_immediate(ifp, ipaddress); */
+				send_gratuitous_arp(ipaddress);
 				ipaddress->garp_gna_pending = false;
 			} else {
 				vrrp->garp_pending = true;

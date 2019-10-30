@@ -1279,6 +1279,15 @@ vrrp_vscript_user_handler(const vector_t *strvec)
 		script_user_set = true;
 	}
 }
+//for dpdk port
+static void
+vrrp_dpdk_int_handler(vector_t *strvec)
+{
+    vrrp_t *vrrp = LIST_TAIL_DATA(vrrp_data->vrrp);
+    strcpy (vrrp->dpdk_ifp, vector_slot(strvec, 1));
+    log_message(LOG_INFO, "find dpdk interface %s !!!", vrrp->dpdk_ifp);
+}
+
 static void
 vrrp_vscript_end_handler(void)
 {
@@ -1887,6 +1896,7 @@ init_vrrp_keywords(bool active)
 	install_keyword("native_ipv6", &vrrp_native_ipv6_handler);
 	install_keyword("state", &vrrp_state_handler);
 	install_keyword("interface", &vrrp_int_handler);
+    install_keyword("dpdk_interface", &vrrp_dpdk_int_handler);//port of dpdk
 	install_keyword("dont_track_primary", &vrrp_dont_track_handler);
 	install_keyword("track_interface", &vrrp_track_if_handler);
 	install_keyword("track_script", &vrrp_track_scr_handler);

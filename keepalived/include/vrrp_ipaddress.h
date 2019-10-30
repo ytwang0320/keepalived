@@ -37,6 +37,7 @@
 #include "list.h"
 #include "vector.h"
 #include "vrrp_static_track.h"
+#include "libipvs.h"
 
 /* types definition */
 typedef struct _ip_address {
@@ -111,8 +112,8 @@ struct ipt_handle;
 
 /* prototypes */
 extern const char *ipaddresstos(char *, const ip_address_t *);
-extern int netlink_ipaddress(ip_address_t *, int);
-extern bool netlink_iplist(list, int, bool);
+extern int netlink_ipaddress(ip_address_t *, char *, int);
+extern bool netlink_iplist(list, int, bool, char*);
 extern void free_ipaddress(void *);
 extern void format_ipaddress(const ip_address_t *, char *, size_t);
 extern void dump_ipaddress(FILE *, const void *);
@@ -120,8 +121,8 @@ extern ip_address_t *parse_ipaddress(ip_address_t *, const char *, bool);
 extern ip_address_t *parse_route(const char *);
 extern void alloc_ipaddress(list, const vector_t *, const interface_t *, bool);
 extern void get_diff_address(vrrp_t *, vrrp_t *, list);
-extern void clear_address_list(list, bool);
+extern void clear_address_list(list, bool, char *);
 extern void clear_diff_saddresses(void);
-extern void reinstate_static_address(ip_address_t *);
+extern void reinstate_static_address(ip_address_t *, char *);
 
 #endif

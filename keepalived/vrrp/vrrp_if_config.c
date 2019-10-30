@@ -43,7 +43,7 @@
 
 #ifdef _HAVE_IPV4_DEVCONF_
 
-#include <linux/ip.h>
+//#include <linux/ip.h>
 #include <stdint.h>
 
 #include "vrrp_if.h"

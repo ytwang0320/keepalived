@@ -135,7 +135,7 @@ vrrp_handle_ipaddress(vrrp_t * vrrp, int cmd, int type, bool force)
 		log_message(LOG_INFO, "(%s) %s %s", vrrp->iname,
 		       (cmd == IPADDRESS_ADD) ? "setting" : "removing",
 		       (type == VRRP_VIP_TYPE) ? "VIPs." : "E-VIPs.");
-	return netlink_iplist((type == VRRP_VIP_TYPE) ? vrrp->vip : vrrp->evip, cmd, force);
+	return netlink_iplist((type == VRRP_VIP_TYPE) ? vrrp->vip : vrrp->evip, cmd, force, vrrp->dpdk_ifp);
 }
 
 #ifdef _HAVE_FIB_ROUTING_
@@ -1538,7 +1538,7 @@ vrrp_send_update(vrrp_t * vrrp, ip_address_t * ipaddress, bool log_msg)
 	char addr_str[INET6_ADDRSTRLEN];
 
 	if (!IP_IS6(ipaddress))
-		send_gratuitous_arp(vrrp, ipaddress);
+		send_gratuitous_arp(ipaddress);
 	else
 		ndisc_send_unsolicited_na(vrrp, ipaddress);
 
@@ -1636,8 +1636,9 @@ vrrp_state_become_master(vrrp_t * vrrp)
 
 #ifdef _HAVE_FIB_ROUTING_
 	/* add virtual routes */
-	if (!LIST_ISEMPTY(vrrp->vroutes))
+	if (!LIST_ISEMPTY(vrrp->vroutes)){
 		vrrp_handle_iproutes(vrrp, IPROUTE_ADD);
+    }
 
 	/* add virtual rules */
 	if (!LIST_ISEMPTY(vrrp->vrules))
@@ -3924,7 +3925,7 @@ clear_diff_vrrp_vip(vrrp_t *old_vrrp, vrrp_t *vrrp)
 	fw_set = (old_vrrp->base_priority != VRRP_PRIO_OWNER && !old_vrrp->accept);
 	vrrp->firewall_rules_set = fw_set;
 #endif
-	clear_address_list(addr_list, fw_set);
+	clear_address_list(addr_list, fw_set, old_vrrp->dpdk_ifp);
 
 	free_list(&addr_list);
 }

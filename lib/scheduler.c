@@ -918,6 +918,9 @@ thread_cleanup_master(thread_master_t * m)
 void
 thread_destroy_master(thread_master_t * m)
 {
+	if (!m)
+		return;
+
 	if (m->epoll_fd != -1) {
 		close(m->epoll_fd);
 		m->epoll_fd = -1;

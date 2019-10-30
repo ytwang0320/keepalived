@@ -79,6 +79,7 @@ add_addr2req(struct nlmsghdr *n, size_t maxlen, unsigned short type, ip_address_
 	return (unsigned short)addattr_l(n, maxlen, type, addr, alen);
 }
 
+#if 0
 #if HAVE_DECL_RTA_VIA
 static unsigned short
 add_addr_fam2req(struct nlmsghdr *n, size_t maxlen, unsigned short type, ip_address_t *ip_address)
@@ -293,228 +294,105 @@ add_nexthops(ip_route_t *route, struct nlmsghdr *nlh, struct rtmsg *rtm)
 	if (rta->rta_len > RTA_LENGTH(0))
 		addattr_l(nlh, sizeof(buf), RTA_MULTIPATH, RTA_DATA(rta), RTA_PAYLOAD(rta));
 }
+#endif
+/*
+ * refer to function netlink_scope_a2n
+ * */
+static int scope_n2dpvs(int scope)
+{
+    if (scope == 254)
+        return ROUTE_CF_SCOPE_HOST;
+    if (scope == 253)
+        return ROUTE_CF_SCOPE_LINK;
+    if (scope == 0)
+        return ROUTE_CF_SCOPE_GLOBAL;
+    return ROUTE_CF_SCOPE_GLOBAL;
+}
 
-/* Add/Delete IP route to/from a specific interface */
-static bool
+static int flag_n2dpvs(int scope)
+{
+    if (scope == 254)
+        return RTF_LOCALIN;
+    if (scope == 253)
+        return RTF_FORWARD; 
+    return RTF_FORWARD;
+}
+
+void dpvs_fill_rt4conf(ip_route_t *iproute, struct dp_vs_route_conf *route_conf)
+{
+    route_conf->af = AF_INET;
+    (route_conf->dst).in  = (iproute->dst->u).sin.sin_addr;
+    route_conf->plen = iproute->dmask;
+
+    if (iproute->gw){
+        (route_conf->via).in = (iproute->gw->u).sin.sin_addr;
+    } else {
+        (route_conf->via).in.s_addr = 0;
+    }
+
+    if (iproute->src){
+        (route_conf->src).in = (iproute->src->u).sin.sin_addr;
+    } else {
+        (route_conf->src).in.s_addr = 0;
+    }
+
+    route_conf->scope = scope_n2dpvs(iproute->scope);    
+    strcpy(route_conf->ifname, iproute->ifname);
+    route_conf->mtu = 0;
+    route_conf->metric = 0;
+}
+
+void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg) 
+{
+    rt6_cfg->dst.addr = ((iproute->dst)->u).sin6_addr;
+    rt6_cfg->dst.plen = iproute->dmask;
+    rt6_cfg->src.plen = 128;
+    if (iproute->gw) {
+        rt6_cfg->gateway = (iproute->gw->u).sin6_addr;
+    } else {
+        memset(&rt6_cfg->gateway, 0, sizeof(rt6_cfg->gateway));
+    }
+
+    if (iproute->src) {
+        rt6_cfg->src.addr = (iproute->src->u).sin6_addr;
+    } else {
+        memset(&rt6_cfg->src, 0, sizeof(rt6_cfg->src));
+    }
+
+    rt6_cfg->flags |= flag_n2dpvs(iproute->scope);
+    strcpy(rt6_cfg->ifname, iproute->ifname);
+    rt6_cfg->mtu = 0;
+}
+
+int
 netlink_route(ip_route_t *iproute, int cmd)
 {
-	struct {
-		struct nlmsghdr n;
-		struct rtmsg r;
-		char buf[RTM_SIZE];
-	} req;
-	char buf[RTA_SIZE];
-	struct rtattr *rta = (void*)buf;
+    char *tmp_dst,*tmp_src;
 
-	memset(&req, 0, sizeof (req));
+    tmp_dst = ipaddresstos(NULL, iproute->dst);
+    tmp_src = ipaddresstos(NULL, iproute->src);
+    
+    log_message(LOG_INFO, "ip route %d %s/%d src %s port %s scope %d",
+            cmd, tmp_dst, iproute->dmask, tmp_src, iproute->ifname, iproute->scope);
+    FREE(tmp_dst);
+    FREE(tmp_src);
 
-	req.n.nlmsg_len   = NLMSG_LENGTH(sizeof(struct rtmsg));
-	if (cmd == IPROUTE_DEL) {
-		req.n.nlmsg_flags = NLM_F_REQUEST;
-		req.n.nlmsg_type  = RTM_DELROUTE;
-	}
-	else {
-		req.n.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE;
-		if (cmd == IPROUTE_REPLACE)
-			req.n.nlmsg_flags |= NLM_F_REPLACE;
-		req.n.nlmsg_type  = RTM_NEWROUTE;
-	}
-
-	rta->rta_type = RTA_METRICS;
-	rta->rta_len = RTA_LENGTH(0);
-
-	req.r.rtm_family = iproute->family;
-	if (iproute->table < 256)
-		req.r.rtm_table = (unsigned char)iproute->table;
-	else {
-		req.r.rtm_table = RT_TABLE_UNSPEC;
-		addattr32(&req.n, sizeof(req), RTA_TABLE, iproute->table);
-	}
-
-	if (cmd == IPROUTE_DEL) {
-		req.r.rtm_scope = RT_SCOPE_NOWHERE;
-		if (iproute->mask & IPROUTE_BIT_TYPE)
-			req.r.rtm_type = iproute->type;
-	}
-	else {
-		req.r.rtm_scope = RT_SCOPE_UNIVERSE;
-		req.r.rtm_type = iproute->type;
-	}
-
-	if (iproute->mask & IPROUTE_BIT_PROTOCOL)
-		req.r.rtm_protocol = iproute->protocol;
-	else
-		req.r.rtm_protocol = RTPROT_KEEPALIVED;
-
-	if (iproute->mask & IPROUTE_BIT_SCOPE)
-		req.r.rtm_scope = iproute->scope;
-
-	if (iproute->dst) {
-		req.r.rtm_dst_len = iproute->dst->ifa.ifa_prefixlen;
-		add_addr2req(&req.n, sizeof(req), RTA_DST, iproute->dst);
-	}
-
-	if (iproute->src) {
-		req.r.rtm_src_len = iproute->src->ifa.ifa_prefixlen;
-		add_addr2req(&req.n, sizeof(req), RTA_SRC, iproute->src);
-	}
-
-	if (iproute->pref_src)
-		add_addr2req(&req.n, sizeof(req), RTA_PREFSRC, iproute->pref_src);
-
-//#if HAVE_DECL_RTA_NEWDST
-//	if (iproute->as_to)
-//		add_addr2req(&req.n, sizeof(req), RTA_NEWDST, iproute->as_to);
-//#endif
-
-	if (iproute->via) {
-		if (iproute->via->ifa.ifa_family == iproute->family)
-			add_addr2req(&req.n, sizeof(req), RTA_GATEWAY, iproute->via);
-#if HAVE_DECL_RTA_VIA
-		else
-			add_addr_fam2req(&req.n, sizeof(req), RTA_VIA, iproute->via);
-#endif
-	}
-
-#if HAVE_DECL_RTA_ENCAP
-	if (iproute->encap.type != LWTUNNEL_ENCAP_NONE) {
-		char encap_buf[ENCAP_RTA_SIZE];
-		struct rtattr *encap_rta = (void *)encap_buf;
-
-		encap_rta->rta_type = RTA_ENCAP;
-		encap_rta->rta_len = RTA_LENGTH(0);
-		add_encap(encap_rta, sizeof(encap_buf), &iproute->encap);
-
-		if (encap_rta->rta_len > RTA_LENGTH(0))
-			addraw_l(&req.n, sizeof(encap_buf), RTA_DATA(encap_rta), RTA_PAYLOAD(encap_rta));
-	}
-#endif
-
-	if (iproute->mask & IPROUTE_BIT_DSFIELD)
-		req.r.rtm_tos = iproute->tos;
-
-	if (iproute->oif)
-		addattr32(&req.n, sizeof(req), RTA_OIF, iproute->oif->ifindex);
-
-	if (iproute->mask & IPROUTE_BIT_METRIC)
-		addattr32(&req.n, sizeof(req), RTA_PRIORITY, iproute->metric);
-
-	req.r.rtm_flags = iproute->flags;
-
-	if (iproute->realms)
-		addattr32(&req.n, sizeof(req), RTA_FLOW, iproute->realms);
-
-#if HAVE_DECL_RTA_EXPIRES
-	if (iproute->mask & IPROUTE_BIT_EXPIRES)
-		addattr32(&req.n, sizeof(req), RTA_EXPIRES, iproute->expires);
-#endif
-
-#if HAVE_DECL_RTAX_CC_ALGO
-	if (iproute->congctl)
-		rta_addattr_l(rta, sizeof(buf), RTAX_CC_ALGO, iproute->congctl, strlen(iproute->congctl));
-#endif
-
-	if (iproute->mask & IPROUTE_BIT_RTT)
-		rta_addattr32(rta, sizeof(buf), RTAX_RTT, iproute->rtt);
-
-	if (iproute->mask & IPROUTE_BIT_RTTVAR)
-		rta_addattr32(rta, sizeof(buf), RTAX_RTTVAR, iproute->rttvar);
-
-	if (iproute->mask & IPROUTE_BIT_RTO_MIN)
-		rta_addattr32(rta, sizeof(buf), RTAX_RTO_MIN, iproute->rto_min);
-
-	if (iproute->features)
-		rta_addattr32(rta, sizeof(buf), RTAX_FEATURES, iproute->features);
-
-	if (iproute->mask & IPROUTE_BIT_MTU)
-		rta_addattr32(rta, sizeof(buf), RTAX_MTU, iproute->mtu);
-
-	if (iproute->mask & IPROUTE_BIT_WINDOW)
-		rta_addattr32(rta, sizeof(buf), RTAX_WINDOW, iproute->window);
-
-	if (iproute->mask & IPROUTE_BIT_SSTHRESH)
-		rta_addattr32(rta, sizeof(buf), RTAX_SSTHRESH, iproute->ssthresh);
-
-	if (iproute->mask & IPROUTE_BIT_CWND)
-		rta_addattr32(rta, sizeof(buf), RTAX_CWND, iproute->cwnd);
-
-	if (iproute->mask & IPROUTE_BIT_ADVMSS)
-		rta_addattr32(rta, sizeof(buf), RTAX_ADVMSS, iproute->advmss);
-
-	if (iproute->mask & IPROUTE_BIT_REORDERING)
-		rta_addattr32(rta, sizeof(buf), RTAX_REORDERING, iproute->reordering);
-
-	if (iproute->mask & IPROUTE_BIT_HOPLIMIT)
-		rta_addattr32(rta, sizeof(buf), RTAX_HOPLIMIT, iproute->hoplimit);
-
-	if (iproute->mask & IPROUTE_BIT_INITCWND)
-		rta_addattr32(rta, sizeof(buf), RTAX_INITCWND, iproute->initcwnd);
-
-	if (iproute->mask & IPROUTE_BIT_INITRWND)
-		rta_addattr32(rta, sizeof(buf), RTAX_INITRWND, iproute->initrwnd);
-
-#if HAVE_DECL_RTAX_QUICKACK
-	if (iproute->mask & IPROUTE_BIT_QUICKACK)
-		rta_addattr32(rta, sizeof(buf), RTAX_QUICKACK, iproute->quickack);
-#endif
-
-#if HAVE_DECL_RTA_PREF
-	if (iproute->mask & IPROUTE_BIT_PREF)
-		addattr8(&req.n, sizeof(req), RTA_PREF, iproute->pref);
-#endif
-
-#if HAVE_DECL_RTAX_FASTOPEN_NO_COOKIE
-	if (iproute->mask & IPROUTE_BIT_FASTOPEN_NO_COOKIE)
-		rta_addattr32(rta, sizeof(buf), RTAX_FASTOPEN_NO_COOKIE, iproute->fastopen_no_cookie);
-#endif
-
-#if HAVE_DECL_RTA_TTL_PROPAGATE
-	if (iproute->mask & IPROUTE_BIT_TTL_PROPAGATE)
-		addattr8(&req.n, sizeof(req), RTA_TTL_PROPAGATE, iproute->ttl_propagate);
-#endif
-
-	if (rta->rta_len > RTA_LENGTH(0)) {
-		if (iproute->lock)
-			rta_addattr32(rta, sizeof(buf), RTAX_LOCK, iproute->lock);
-		addattr_l(&req.n, sizeof(req), RTA_METRICS, RTA_DATA(rta), RTA_PAYLOAD(rta));
-	}
-
-	if (!LIST_ISEMPTY(iproute->nhs))
-		add_nexthops(iproute, &req.n, &req.r);
-
-#ifdef DEBUG_NETLINK_MSG
-	size_t i, j;
-	uint8_t *p;
-	char lbuf[3072];
-	char *op = lbuf;
-
-	log_message(LOG_INFO, "rtmsg buffer used %lu, rtattr buffer used %d", req.n.nlmsg_len - NLMSG_LENGTH(sizeof(struct rtmsg)), rta->rta_len);
-
-	op += (size_t)snprintf(op, sizeof(lbuf) - (op - lbuf), "nlmsghdr %p(%u):", &req.n, req.n.nlmsg_len);
-	for (i = 0, p = (uint8_t*)&req.n; i < sizeof(struct nlmsghdr); i++)
-		op += (size_t)snprintf(op, sizeof(lbuf) - (op - lbuf), " %2.2hhx", *(p++));
-	log_message(LOG_INFO, "%s", lbuf);
-
-	op = lbuf;
-	op += (size_t)snprintf(op, sizeof(lbuf) - (op - lbuf), "rtmsg %p(%lu):", &req.r, req.n.nlmsg_len - sizeof(struct nlmsghdr));
-	for (i = 0, p = (uint8_t*)&req.r; i < + req.n.nlmsg_len - sizeof(struct nlmsghdr); i++)
-		op += (size_t)snprintf(op, sizeof(lbuf) - (op - lbuf), " %2.2hhx", *(p++));
-
-	for (j = 0; lbuf + j < op; j+= MAX_LOG_MSG)
-		log_message(LOG_INFO, "%.*", MAX_LOG_MSG, lbuf+j);
-#endif
-
-	/* This returns ESRCH if the address of via address doesn't exist */
-	/* ENETDOWN if dev p33p1.40 for example is down */
-	if (netlink_talk(&nl_cmd, &req.n) < 0) {
-#if HAVE_DECL_RTA_EXPIRES
-		/* If an expiry was set on the route, it may have disappeared already */
-		if (cmd != IPROUTE_DEL || !(iproute->mask & IPROUTE_BIT_EXPIRES))
-#endif
-			return true;
-	}
-
-	return false;
+    if (iproute->dst->ifa.ifa_family == AF_INET) {
+        struct dp_vs_route_conf *route_conf;
+        route_conf = (struct dp_vs_route_conf *)malloc(sizeof(struct dp_vs_route_conf));
+        memset(route_conf, 0, sizeof(*route_conf));
+        dpvs_fill_rt4conf(iproute, route_conf);
+        ipvs_set_route(route_conf, cmd);
+        free(route_conf);
+    } else {
+        struct dp_vs_route6_conf *rt6_cfg;
+        rt6_cfg = (struct dp_vs_route6_conf *)malloc(sizeof(struct dp_vs_route6_conf));
+        memset(rt6_cfg, 0, sizeof(*rt6_cfg));
+        dpvs_fill_rt6conf(iproute, rt6_cfg);
+        ipvs_set_route6(rt6_cfg, cmd);
+        free(rt6_cfg);
+    }
+    return 1;
 }
 
 /* Add/Delete a list of IP routes */
@@ -1433,13 +1311,7 @@ alloc_route(list rt_list, const vector_t *strvec, bool allow_track_group)
 			new->mask |= IPROUTE_BIT_METRIC;
 		}
 		else if (!strcmp(str, "dev") || !strcmp(str, "oif")) {
-			str = strvec_slot(strvec, ++i);
-			ifp = if_get_by_ifname(str, IF_CREATE_IF_DYNAMIC);
-			if (!ifp) {
-				report_config_error(CONFIG_GENERAL_ERROR, "WARNING - interface %s for VROUTE nexthop doesn't exist", str);
-				goto err;
-			}
-			new->oif = ifp;
+			strcpy(new->ifname, strvec_slot(strvec, ++i));
 		}
 		else if (!strcmp(str, "onlink")) {
 			/* Note: IPv4 only */

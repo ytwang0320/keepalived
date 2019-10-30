@@ -46,6 +46,9 @@
 #endif
 #include "libipvs.h"
 
+#define ESTABLISH_TIMEOUT_MAX 3600
+#define ESTABLISH_TIMEOUT_MIN 1
+
 /* List of valid schedulers */
 static const char *lvs_schedulers[] =
 	{"rr", "wrr", "lc", "wlc", "lblc", "sh", "mh", "dh", "fo", "ovf", "lblcr", "sed", "nq", NULL};
@@ -140,6 +143,16 @@ vsg_handler(const vector_t *strvec)
 		free_list_element(check_data->vs_group, check_data->vs_group->tail);
 	}
 }
+
+static void
+laddr_group_handler(vector_t *strvec)
+{
+	if (!strvec)
+		return;
+	alloc_laddr_group(vector_slot(strvec, 1));
+	alloc_value_block(alloc_laddr_entry, strvec_slot(strvec, 0));
+}
+
 static void
 vs_handler(const vector_t *strvec)
 {
@@ -371,6 +384,10 @@ svr_forwarding_handler(real_server_t *rs, const vector_t *strvec, const char *s_
 		rs->forwarding_method = IP_VS_CONN_F_DROUTE;
 	else if (!strcmp(str, "TUN"))
 		rs->forwarding_method = IP_VS_CONN_F_TUNNEL;
+	else if (!strcmp(str, "FNAT"))
+		rs->forwarding_method = IP_VS_CONN_F_FULLNAT;
+	else if (!strcmp(str, "SNAT"))
+                rs->forwarding_method = IP_VS_CONN_F_SNAT;
 	else {
 		report_config_error(CONFIG_GENERAL_ERROR, "PARSER : unknown [%s] routing method for %s server.", str, s_type);
 		return;
@@ -548,6 +565,8 @@ proto_handler(const vector_t *strvec)
 		vs->service_type = IPPROTO_SCTP;
 	else if (!strcasecmp(str, "UDP"))
 		vs->service_type = IPPROTO_UDP;
+	else if (!strcasecmp(str, "ICMP"))
+                vs->service_type = IPPROTO_ICMP;
 	else
 		report_config_error(CONFIG_GENERAL_ERROR, "Unknown protocol %s - ignoring", str);
 }
@@ -625,6 +644,8 @@ rs_end_handler(void)
 {
 	virtual_server_t *vs;
 	real_server_t *rs;
+	virtual_server_group_t *vsg;
+	virtual_server_group_entry_t *vsge;
 
 	if (LIST_ISEMPTY(check_data->vs))
 		return;
@@ -642,11 +663,18 @@ rs_end_handler(void)
 	if (rs->forwarding_method != IP_VS_CONN_F_TUNNEL)
 #endif
 	{
-		if (vs->af == AF_UNSPEC)
-			vs->af = rs->addr.ss_family;
+		if (vs->af == AF_UNSPEC) {
+			vsg = ipvs_get_group_by_name(vs->vsgname, check_data->vs_group);
+			if (vsg) {
+				vsge = ELEMENT_DATA(LIST_HEAD(vsg->addr_range));
+				vs->af = vsge->addr.ss_family;
+			} else {
+				vs->af = rs->addr.ss_family;
+			}			
+		}
 		else if (vs->af != rs->addr.ss_family) {
-			report_config_error(CONFIG_GENERAL_ERROR, "Address family of virtual server and real server %s don't match - skipping real server.", inet_sockaddrtos(&rs->addr));
-			free_list_element(vs->rs, vs->rs->tail);
+			/*report_config_error(CONFIG_GENERAL_ERROR, "Address family of virtual server and real server %s don't match - skipping real server.", inet_sockaddrtos(&rs->addr));
+			free_list_element(vs->rs, vs->rs->tail);*/
 		}
 	}
 }
@@ -926,6 +954,116 @@ vs_weight_handler(const vector_t *strvec)
 	vs->weight = weight;
 }
 
+static void 
+laddr_gname_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	vs->local_addr_gname = set_value(strvec);
+}
+
+static void 
+syn_proxy_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	vs->syn_proxy = 1;
+}
+
+static void
+bind_dev_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	vs->vip_bind_dev = set_value(strvec);
+}
+
+static void
+blklst_group_handler(vector_t *strvec)
+{
+	if (!strvec)
+		return;
+	alloc_blklst_group(vector_slot(strvec, 1));
+	alloc_value_block(alloc_blklst_entry, strvec_slot(strvec, 0));
+}
+
+static void
+blklst_gname_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	vs->blklst_addr_gname = set_value(strvec);
+}
+
+static void
+bps_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	char *str = vector_slot(strvec, 1);
+	vs->bps = atoi(str);
+}
+
+static void
+limit_proportion_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    char *str = vector_slot(strvec, 1); 
+    vs->limit_proportion = atoi(str);
+}
+
+static void
+establish_timeout_handler(vector_t *strvec)
+{
+	int conn_timeout;
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	conn_timeout = atoi(vector_slot(strvec, 1));
+	if (conn_timeout > ESTABLISH_TIMEOUT_MAX)
+		conn_timeout = ESTABLISH_TIMEOUT_MAX;
+	if (conn_timeout < ESTABLISH_TIMEOUT_MIN)
+		conn_timeout = ESTABLISH_TIMEOUT_MIN;
+	vs->conn_timeout = conn_timeout;
+}
+
+static void
+src_range_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	snprintf(vs->srange, sizeof(vs->srange), "%s", (char *)vector_slot(strvec, 1));
+}
+
+static void
+dst_range_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	snprintf(vs->drange, sizeof(vs->drange), "%s", (char *)vector_slot(strvec, 1));
+}
+
+static void
+oif_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	snprintf(vs->oifname, sizeof(vs->oifname), "%s", (char *)vector_slot(strvec, 1));
+}
+
+static void
+iif_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	snprintf(vs->iifname, sizeof(vs->iifname), "%s", (char *)vector_slot(strvec, 1));
+}
+
+static void
+hash_target_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	char *str = vector_slot(strvec, 1);
+
+	if (!strcmp(str, "sip"))
+		vs->hash_target = IP_VS_SVC_F_SIP_HASH;
+	else if (!strcmp(str, "qid"))
+		vs->hash_target = IP_VS_SVC_F_QID_HASH;
+	else {
+		vs->hash_target = IP_VS_SVC_F_SIP_HASH;
+		log_message(LOG_INFO, "PARSER : unknown [%s] hash target, use source_ip", str);
+	}
+}
+
 void
 init_check_keywords(bool active)
 {
@@ -935,6 +1073,11 @@ init_check_keywords(bool active)
 	install_keyword("ca", &sslca_handler);
 	install_keyword("certificate", &sslcert_handler);
 	install_keyword("key", &sslkey_handler);
+
+	/* local IP address mapping */
+	install_keyword_root("local_address_group", &laddr_group_handler, active);
+	/* blacklist IP */
+	install_keyword_root("deny_address_group", &blklst_group_handler, active);
 
 	/* Virtual server mapping */
 	install_keyword_root("virtual_server_group", &vsg_handler, active);
@@ -962,16 +1105,24 @@ init_check_keywords(bool active)
 	install_keyword("sh-fallback", &lbflags_handler);
 #endif
 	install_keyword("lb_kind", &forwarding_handler);
+	install_keyword("establish_timeout", &establish_timeout_handler);
 	install_keyword("lvs_method", &forwarding_handler);
 #ifdef _HAVE_PE_NAME_
 	install_keyword("persistence_engine", &pengine_handler);
 #endif
 	install_keyword("persistence_timeout", &pto_handler);
 	install_keyword("persistence_granularity", &pgr_handler);
+	install_keyword("bps", &bps_handler);
+	install_keyword("limit_proportion", &limit_proportion_handler);
 	install_keyword("protocol", &proto_handler);
 	install_keyword("ha_suspend", &hasuspend_handler);
 	install_keyword("smtp_alert", &vs_smtp_alert_handler);
 	install_keyword("virtualhost", &vs_virtualhost_handler);
+	install_keyword("src-range", &src_range_handler);
+	install_keyword("dst-range", &dst_range_handler);
+	install_keyword("oif", &oif_handler);
+	install_keyword("iif", &iif_handler);
+	install_keyword("hash_target", &hash_target_handler);
 
 	/* Pool regression detection and handling. */
 	install_keyword("alpha", &vs_alpha_handler);
@@ -1009,6 +1160,10 @@ init_check_keywords(bool active)
 	/* Checkers mapping */
 	install_checkers_keyword();
 	install_sublevel_end();
+	install_keyword("laddr_group_name", &laddr_gname_handler);
+	install_keyword("daddr_group_name", &blklst_gname_handler);
+	install_keyword("syn_proxy", &syn_proxy_handler);
+	install_keyword("vip_bind_dev", &bind_dev_handler);
 }
 
 const vector_t *

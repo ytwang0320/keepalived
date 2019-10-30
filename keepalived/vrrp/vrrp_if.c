@@ -30,7 +30,7 @@
 #include <errno.h>
 #include <syslog.h>
 #include <inttypes.h>
-#include <linux/ip.h>
+//#include <linux/ip.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <linux/mii.h>

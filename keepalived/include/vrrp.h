@@ -217,6 +217,7 @@ typedef struct _vrrp_t {
 	unsigned		strict_mode;		/* Enforces strict VRRP compliance */
 #ifdef _HAVE_VRRP_VMAC_
 	unsigned long		vmac_flags;		/* VRRP VMAC flags */
+    	char        dpdk_ifp[16];
 	char			vmac_ifname[IFNAMSIZ];	/* Name of VRRP VMAC interface */
 	bool			duplicate_vrid_fault;	/* Set if we have a fault due to duplicate VRID */
 #ifdef _HAVE_VRRP_IPVLAN_

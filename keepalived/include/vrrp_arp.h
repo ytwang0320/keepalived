@@ -31,6 +31,7 @@
 #include "vrrp.h"
 #include "vrrp_if.h"
 #include "vrrp_ipaddress.h"
+#include "libipvs.h"
 
 typedef struct inf_arphdr {
 	unsigned short int ar_hrd;
@@ -54,6 +55,5 @@ typedef struct ipoib_hdr {
 /* prototypes */
 extern void gratuitous_arp_init(void);
 extern void gratuitous_arp_close(void);
-extern void send_gratuitous_arp(vrrp_t *, ip_address_t *);
-extern ssize_t send_gratuitous_arp_immediate(interface_t *, ip_address_t *);
+extern void send_gratuitous_arp(ip_address_t *);
 #endif

@@ -45,7 +45,7 @@
 
 /* Daemon dynamic data structure definition */
 #define KEEPALIVED_DEFAULT_DELAY	(60 * TIMER_HZ)
-
+#define TNLKINDSIZ 			16
 /* SSL specific data */
 typedef struct _ssl_data {
 	int				enable;
@@ -109,6 +109,46 @@ typedef struct _real_server {
 #endif
 } real_server_t;
 
+/* local ip address group definition */
+typedef struct _local_addr_entry {
+	struct sockaddr_storage addr;
+	uint8_t range;
+	char ifname[IFNAMSIZ];
+} local_addr_entry;
+
+typedef struct _local_addr_group {
+	char *gname;
+	list addr_ip;
+	list range;
+} local_addr_group;
+
+/* blacklist ip group*/
+typedef struct _blklst_addr_entry {
+        struct sockaddr_storage addr;
+        uint8_t range;
+} blklst_addr_entry;
+
+
+typedef struct _blklst_addr_group {
+        char *gname;
+        list addr_ip;
+        list range;
+} blklst_addr_group;
+
+typedef struct _tunnel_entry {
+        struct sockaddr_storage remote;
+        struct sockaddr_storage local;
+        char   kind[TNLKINDSIZ];
+        char   ifname[IFNAMSIZ];
+        char   link[IFNAMSIZ];
+} tunnel_entry;
+
+typedef struct _tunnel_group {
+        char *gname;
+        list tunnel_entry;
+} tunnel_group;
+
+
 /* Virtual Server group definition */
 typedef struct _virtual_server_group_entry {
 	bool 				is_fwmark;
@@ -131,6 +171,7 @@ typedef struct _virtual_server_group_entry {
 
 typedef struct _virtual_server_group {
 	char				*gname;
+	list				addr_ip;
 	list				addr_range;
 	list				vfwmark;
 } virtual_server_group_t;
@@ -150,6 +191,9 @@ typedef struct _virtual_server {
 	char				sched[IP_VS_SCHEDNAME_MAXLEN];
 	uint32_t			flags;
 	uint32_t			persistence_timeout;
+	uint32_t			bps;
+	uint32_t			limit_proportion;
+	uint32_t 			conn_timeout;
 #ifdef _HAVE_PE_NAME_
 	char				pe_name[IP_VS_PENAME_MAXLEN];
 #endif
@@ -193,6 +237,15 @@ typedef struct _virtual_server {
 	struct ip_vs_stats64		stats;
 #endif
 #endif
+	char 	srange[256];
+	char 	drange[256];
+	char 	iifname[IFNAMSIZ];
+	char 	oifname[IFNAMSIZ];
+	unsigned hash_target;
+	unsigned syn_proxy;
+	char 	*local_addr_gname; 	/*local ip address group name*/
+	char 	*blklst_addr_gname; 	/*black list ip group name*/	
+	char 	*vip_bind_dev; 		/*the interface name, vip bindto*/
 } virtual_server_t;
 
 /* Configuration data root */
@@ -206,6 +259,9 @@ typedef struct _check_data {
 #endif
 	unsigned			num_checker_fd_required;
 	unsigned			num_smtp_alert;
+	list laddr_group;
+	list blklst_group;
+	list tunnel_group;
 } check_data_t;
 
 /* macro utility */
@@ -241,5 +297,15 @@ extern const char *format_vs (const virtual_server_t *);
 extern const char *format_vsge (const virtual_server_group_entry_t *);
 extern const char *format_rs(const real_server_t *, const virtual_server_t *);
 extern bool validate_check_config(void);
+extern void alloc_laddr_group(char *);
+extern void alloc_laddr_entry(vector_t *);
+extern void alloc_group(char *);
+extern void alloc_rsgroup(char *, char *);
+extern void set_rsgroup(char *);
+extern void dump_check_data(FILE *, check_data_t *);
+extern void alloc_blklst_group(char *);
+extern void alloc_blklst_entry(vector_t *);
 
+extern void alloc_tunnel_entry(char *name);
+extern void alloc_tunnel(char *gname);
 #endif

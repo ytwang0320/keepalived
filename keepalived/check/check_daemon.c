@@ -357,6 +357,13 @@ start_check(list old_checkers_queue, data_t *prev_global_data)
 	if (reload) {
 		clear_diff_services(old_checkers_queue);
 		check_new_rs_state();
+		clear_diff_tunnel();
+	}
+
+	/* Initialize tunnel */
+	if (!init_tunnel()) {
+		stop_check(KEEPALIVED_EXIT_FATAL);
+		return;
 	}
 
 	/* We can send SMTP messages from here so set the time */
