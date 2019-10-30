@@ -193,7 +193,7 @@ static_track_reinstate_config(interface_t *ifp)
 			continue;
 		if (addr->ifp != ifp)
 			continue;
-		reinstate_static_address(addr);
+		reinstate_static_address(addr, NULL);
 	}
 
 #ifdef _HAVE_FIB_ROUTING_

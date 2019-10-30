@@ -38,7 +38,7 @@
 #include <linux/fib_rules.h>
 #endif
 #endif
-#include <linux/ip.h>
+//#include <linux/ip.h>
 #include <unistd.h>
 #include <inttypes.h>
 #include <linux/if_link.h>
@@ -1155,7 +1155,7 @@ netlink_if_address_filter(__attribute__((unused)) struct sockaddr_nl *snl, struc
 			/* Check if a static address has been deleted */
 			LIST_FOREACH(vrrp_data->static_addresses, ipaddr, e) {
 				if (!ipaddr->dont_track && addr_is_equal(ifa, addr.addr, ipaddr, ifp)) {
-					reinstate_static_address(ipaddr);
+					reinstate_static_address(ipaddr, NULL);
 					break;
 				}
 			}

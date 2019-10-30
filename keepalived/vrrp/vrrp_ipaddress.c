@@ -72,129 +72,33 @@ ipaddresstos(char *buf, const ip_address_t *ipaddress)
 }
 
 /* Add/Delete IP address to a specific interface_t */
-int
-netlink_ipaddress(ip_address_t *ipaddress, int cmd)
+static void
+dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct inet_addr_param *param)
 {
-	struct ifa_cacheinfo cinfo;
-	int status = 1;
-	struct {
-		struct nlmsghdr n;
-		struct ifaddrmsg ifa;
-		char buf[256];
-	} req;
-#if HAVE_DECL_IFA_FLAGS
-	uint32_t ifa_flags = 0;
-#else
-	uint8_t ifa_flags = 0;
-#endif
+	param->af = ipaddress->ifa.ifa_family;
+	param->addr.in = ipaddress->u.sin.sin_addr;
+	strcpy(param->ifname, dpdk_port);
+	param->plen = ipaddress->ifa.ifa_prefixlen;
+	param->flags &= ~IFA_F_SAPOOL;
+}
 
-	if (cmd == IPADDRESS_ADD) {
-		/* We can't add the address if the interface doesn't exist */
-		if (!ipaddress->ifp->ifindex) {
-			log_message(LOG_INFO, "Not adding address %s to %s since interface doesn't exist", ipaddresstos(NULL, ipaddress), ipaddress->ifp->ifname);
-			return -1;
-		}
+int
+netlink_ipaddress(ip_address_t* ipaddress, char *dpdk_port, int cmd)
+{
+	struct inet_addr_param param;
 
-		/* Make sure the ifindex for the address is current */
-		ipaddress->ifa.ifa_index = ipaddress->ifp->ifindex;
-	}
-	else if (!ipaddress->ifp->ifindex) {
-		/* The interface has been deleted, so there is no point deleting the address */
-		return 0;
-	}
-	else if (!ipaddress->ifa.ifa_index)
-		ipaddress->ifa.ifa_index = ipaddress->ifp->ifindex;
-
-	memset(&req, 0, sizeof (req));
-
-	req.n.nlmsg_len = NLMSG_LENGTH(sizeof (struct ifaddrmsg));
-	req.n.nlmsg_flags = NLM_F_REQUEST;
-	req.n.nlmsg_type = (cmd == IPADDRESS_DEL) ? RTM_DELADDR : RTM_NEWADDR;
-	req.ifa = ipaddress->ifa;
-
-	if (cmd == IPADDRESS_ADD)
-		ifa_flags = ipaddress->flags;
-
-	if (IP_IS6(ipaddress)) {
-		if (cmd == IPADDRESS_ADD) {
-			/* Mark IPv6 address as deprecated (rfc3484) in order to prevent
-			 * using VRRP VIP as source address in healthchecking use cases.
-			 */
-			if (ipaddress->ifa.ifa_prefixlen == 128) {
-				memset(&cinfo, 0, sizeof(cinfo));
-				cinfo.ifa_prefered = 0;
-				cinfo.ifa_valid = INFINITY_LIFE_TIME;
-
-				addattr_l(&req.n, sizeof(req), IFA_CACHEINFO, &cinfo,
-					  sizeof(cinfo));
-			}
-
-			/* Disable, per VIP, Duplicate Address Detection algorithm (DAD).
-			 * Using the nodad flag has the following benefits:
-			 *
-			 * (1) The address becomes immediately usable after they're
-			 *     configured.
-			 * (2) In the case of a temporary layer-2 / split-brain problem
-			 *     we can avoid that the active VIP transitions into the
-			 *     dadfailed phase and stays there forever - leaving us
-			 *     without service. HA/VRRP setups have their own "DAD"-like
-			 *     functionality, so it's not really needed from the IPv6 stack.
-			 */
-#ifdef IFA_F_NODAD	/* Since Linux 2.6.19 */
-			if (!(ipaddress->flagmask & IFA_F_NODAD))
-				ifa_flags |= IFA_F_NODAD;
-#endif
-		}
-
-		addattr_l(&req.n, sizeof(req), IFA_LOCAL,
-			  &ipaddress->u.sin6_addr, sizeof(ipaddress->u.sin6_addr));
-	} else {
-		addattr_l(&req.n, sizeof(req), IFA_LOCAL,
-			  &ipaddress->u.sin.sin_addr, sizeof(ipaddress->u.sin.sin_addr));
-
-		if (cmd == IPADDRESS_ADD) {
-			if (ipaddress->u.sin.sin_brd.s_addr)
-				addattr_l(&req.n, sizeof(req), IFA_BROADCAST,
-					  &ipaddress->u.sin.sin_brd, sizeof(ipaddress->u.sin.sin_brd));
-		}
-		else {
-			/* IPADDRESS_DEL */
-			addattr_l(&req.n, sizeof(req), IFA_ADDRESS,
-				  &ipaddress->u.sin.sin_addr, sizeof(ipaddress->u.sin.sin_addr));
-		}
-	}
-
-	if (cmd == IPADDRESS_ADD) {
-#if HAVE_DECL_IFA_FLAGS
-		if (ifa_flags)
-			addattr32(&req.n, sizeof(req), IFA_FLAGS, ifa_flags);
-#else
-		req.ifa.ifa_flags = ifa_flags;
-#endif
-		if (ipaddress->label)
-			addattr_l(&req.n, sizeof (req), IFA_LABEL,
-				  ipaddress->label, strlen(ipaddress->label) + 1);
-
-		if (ipaddress->have_peer)
-                        addattr_l(&req.n, sizeof(req), IFA_ADDRESS, &ipaddress->peer, req.ifa.ifa_family == AF_INET6 ? 16 : 4);
-	}
-
-	/* If the state of the interface or its parent is down, it might be because the interface
-	 * has been deleted, but we get the link status change message before the RTM_DELLINK message */
-	if (cmd == IPADDRESS_DEL &&
-	    (((ipaddress->ifp->ifi_flags & (IFF_UP | IFF_RUNNING)) != (IFF_UP | IFF_RUNNING)) ||
-	     ((IF_BASE_IFP(ipaddress->ifp)->ifi_flags & (IFF_UP | IFF_RUNNING)) != (IFF_UP | IFF_RUNNING))))
-		netlink_error_ignore = ENODEV;
-	if (netlink_talk(&nl_cmd, &req.n) < 0)
-		status = -1;
-	netlink_error_ignore = 0;
-
-	return status;
+	if (dpdk_port == NULL)
+		return 1;
+	
+	memset(&param, 0, sizeof(param));
+	dpvs_fill_addrconf(ipaddress, dpdk_port, &param);
+	ipvs_set_ipaddr(&param, cmd);
+	return 1;
 }
 
 /* Add/Delete a list of IP addresses */
 bool
-netlink_iplist(list ip_list, int cmd, bool force)
+netlink_iplist(list ip_list, int cmd, bool force, char* dpdk_port)
 {
 	ip_address_t *ipaddr;
 	element e;
@@ -217,7 +121,7 @@ netlink_iplist(list ip_list, int cmd, bool force)
 			if (force)
 				netlink_error_ignore = ENODEV;
 
-			if (netlink_ipaddress(ipaddr, cmd) > 0) {
+			if (netlink_ipaddress(ipaddr, dpdk_port, cmd) > 0) {
 				ipaddr->set = (cmd == IPADDRESS_ADD);
 				changed_entries = true;
 			}
@@ -618,7 +522,7 @@ alloc_ipaddress(list ip_list, const vector_t *strvec, const interface_t *ifp, bo
 
 /* Find an address in a list */
 static bool
-address_exist(vrrp_t *vrrp, ip_address_t *ipaddress)
+address_exist(vrrp_t *vrrp, ip_address_t *ipaddress, char *old_dpdk_port, char *new_dpdk_port)
 {
 	ip_address_t *ipaddr;
 	element e;
@@ -631,7 +535,7 @@ address_exist(vrrp_t *vrrp, ip_address_t *ipaddress)
 
 
 	LIST_FOREACH(vrrp->vip, ipaddr, e) {
-		if (IP_ISEQ(ipaddr, ipaddress)) {
+		if (IP_ISEQ(ipaddr, ipaddress) && !strcmp(old_dpdk_port, new_dpdk_port)) {
 			ipaddr->set = ipaddress->set;
 #ifdef _WITH_IPTABLES_
 			ipaddr->iptable_rule_set = ipaddress->iptable_rule_set;
@@ -642,10 +546,10 @@ address_exist(vrrp_t *vrrp, ip_address_t *ipaddress)
 			ipaddr->ifa.ifa_index = ipaddress->ifa.ifa_index;
 			return true;
 		}
-	}
+    }
 
 	LIST_FOREACH(vrrp->evip, ipaddr, e) {
-		if (IP_ISEQ(ipaddr, ipaddress)) {
+		if (IP_ISEQ(ipaddr, ipaddress) && !strcmp(old_dpdk_port, new_dpdk_port)) {
 			ipaddr->set = ipaddress->set;
 #ifdef _WITH_IPTABLES_
 			ipaddr->iptable_rule_set = ipaddress->iptable_rule_set;
@@ -683,12 +587,12 @@ get_diff_address(vrrp_t *old, vrrp_t *new, list old_addr)
 		return;
 
 	LIST_FOREACH(old->vip, ipaddr, e) {
-		if (ipaddr->set && !address_exist(new, ipaddr))
+		if (ipaddr->set && !address_exist(new, ipaddr, old->dpdk_ifp, new->dpdk_ifp))
 			list_add(old_addr, ipaddr);
 	}
 
 	LIST_FOREACH(old->evip, ipaddr, e) {
-		if (ipaddr->set && !address_exist(new, ipaddr))
+		if (ipaddr->set && !address_exist(new, ipaddr, old->dpdk_ifp, new->dpdk_ifp))
 			list_add(old_addr, ipaddr);
 	}
 }
@@ -699,15 +603,14 @@ clear_address_list(list delete_addr,
 #ifndef _WITH_FIREWALL_
 				     __attribute__((unused))
 #endif
-							     bool remove_from_firewall
-				   			      )
+		bool remove_from_firewall, char *old_port)
 {
 	/* No addresses to delete */
 	if (LIST_ISEMPTY(delete_addr))
 		return;
 
 	/* All addresses removed */
-	netlink_iplist(delete_addr, IPADDRESS_DEL, false);
+	netlink_iplist(delete_addr, IPADDRESS_DEL, false, old_port);
 #ifdef _WITH_FIREWALL_
 	if (remove_from_firewall)
 		firewall_remove_rule_to_iplist(delete_addr);
@@ -723,16 +626,16 @@ clear_diff_saddresses(void)
 	vrrp_t new = { .vip = vrrp_data->static_addresses };
 
 	get_diff_address(&old, &new, remove_addr);
-	clear_address_list(remove_addr, false);
+	clear_address_list(remove_addr, false, NULL);
 
 	free_list(&remove_addr);
 }
 
-void reinstate_static_address(ip_address_t *ipaddr)
+void reinstate_static_address(ip_address_t *ipaddr, char *dpdk_port)
 {
 	char buf[256];
 
-	ipaddr->set = (netlink_ipaddress(ipaddr, IPADDRESS_ADD) > 0);
+	ipaddr->set = (netlink_ipaddress(ipaddr, dpdk_port, IPADDRESS_ADD) > 0);
 	format_ipaddress(ipaddr, buf, sizeof(buf));
 	log_message(LOG_INFO, "Restoring deleted static address %s", buf);
 }

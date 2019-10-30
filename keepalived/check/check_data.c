@@ -98,6 +98,7 @@ free_vsg(void *data)
 	virtual_server_group_t *vsg = data;
 	FREE_PTR(vsg->gname);
 	free_list(&vsg->addr_range);
+	free_list(&vsg->addr_ip);
 	free_list(&vsg->vfwmark);
 	FREE(vsg);
 }
@@ -109,6 +110,7 @@ dump_vsg(FILE *fp, const void *data)
 	conf_write(fp, " ------< Virtual server group >------");
 	conf_write(fp, " Virtual Server Group = %s", vsg->gname);
 	dump_list(fp, vsg->addr_range);
+	dump_list(fp, vsg->addr_ip); 
 	dump_list(fp, vsg->vfwmark);
 }
 static void
@@ -155,6 +157,7 @@ alloc_vsg(const char *gname)
 	new = (virtual_server_group_t *) MALLOC(sizeof(virtual_server_group_t));
 	new->gname = STRDUP(gname);
 	new->addr_range = alloc_list(free_vsg_entry, dump_vsg_entry);
+	new->addr_ip = alloc_list(free_vsg_entry, dump_vsg_entry);
 	new->vfwmark = alloc_list(free_vsg_entry, dump_vsg_entry);
 
 	list_add(check_data->vs_group, new);
@@ -242,6 +245,7 @@ alloc_vsg_entry(const vector_t *strvec)
 		}
 
 		new->is_fwmark = false;
+		list_add(vsg->addr_ip, new);
 		list_add(vsg->addr_range, new);
 	}
 }
@@ -257,6 +261,9 @@ free_vs(void *data)
 	free_list(&vs->rs);
 	free_notify_script(&vs->notify_quorum_up);
 	free_notify_script(&vs->notify_quorum_down);
+	FREE_PTR(vs->local_addr_gname);
+	FREE_PTR(vs->blklst_addr_gname);
+	FREE_PTR(vs->vip_bind_dev);
 	FREE(vs);
 }
 
@@ -298,7 +305,14 @@ dump_forwarding_method(FILE *fp, const char *prefix, const real_server_t *rs)
 		conf_write(fp, "   %s%sTUN", prefix, fwd_method);
 #endif
 		break;
+	case IP_VS_CONN_F_FULLNAT:
+		conf_write(fp, "default forwarding method = FNAT");
+		break;
+	case IP_VS_CONN_F_SNAT:
+		conf_write(fp, "default forwarding method = SNAT");
+		break;
 	}
+	
 }
 
 static void
@@ -401,6 +415,37 @@ dump_vs(FILE *fp, const void *data)
 				    , FMT_RS(vs->s_svr, vs));
 		dump_forwarding_method(fp, "sorry server ", vs->s_svr);
 	}
+
+	if (vs->bps > 0)
+		conf_write(fp, " in bytes per second = %d", vs->bps);
+
+	if (vs->limit_proportion > 0
+		&& vs->limit_proportion < 100)
+		conf_write(fp, "   limit proportion = %d", vs->limit_proportion);
+
+	if (vs->local_addr_gname)
+		conf_write(fp, "   LOCAL_ADDR GROUP = %s", vs->local_addr_gname);
+
+	if (vs->blklst_addr_gname)
+		conf_write(fp, "   BLACK_LIST GROUP = %s", vs->blklst_addr_gname);
+
+	if (vs->vip_bind_dev)
+		conf_write(fp, "   vip_bind_dev = %s", vs->blklst_addr_gname);
+
+	conf_write(fp, " SYN proxy is %s", vs->syn_proxy ? "ON" : "OFF");
+
+        switch (vs->hash_target) {
+	case IP_VS_SVC_F_SIP_HASH:
+		conf_write(fp, "   hash target = sip");
+		break;
+	case IP_VS_SVC_F_QID_HASH:
+		conf_write(fp, "   hash target = quicid");
+		break;
+	default:
+		conf_write(fp, "   hash target not support");
+		break;
+	}
+
 	conf_write(fp, "   alive = %d", vs->alive);
 	conf_write(fp, "   quorum_state_up = %d", vs->quorum_state_up);
 	conf_write(fp, "   reloaded = %d", vs->reloaded);
@@ -429,6 +474,10 @@ alloc_vs(const char *param1, const char *param2)
 			return;
 		}
 		new->vfwmark = fwmark;
+	}
+	else if (!strcmp(param1, "match")) {
+		new->forwarding_method = IP_VS_CONN_F_SNAT; 
+
 	} else {
 		/* Don't pass a zero for port number to inet_stosockaddr. This was added in v2.0.7
 		 * to support legacy configuration since previously having no port wasn't allowed. */
@@ -443,8 +492,8 @@ alloc_vs(const char *param1, const char *param2)
 
 		new->af = new->addr.ss_family;
 #ifndef LIBIPVS_USE_NL
-		if (new->af != AF_INET) {
-			report_config_error(CONFIG_GENERAL_ERROR, "IPVS with IPv6 is not supported by this build");
+		if (new->af != AF_INET && new->af != AF_INET6) {
+			report_config_error(CONFIG_GENERAL_ERROR, "IPVS with IPv4 & IPv6 is supported only by this build");
 			FREE(new);
 			skip_block(true);
 			return;
@@ -469,8 +518,174 @@ alloc_vs(const char *param1, const char *param2)
 	new->delay_before_retry = ULONG_MAX;
 	new->weight = 1;
 	new->smtp_alert = -1;
+	new->conn_timeout = 0;
+	new->syn_proxy = 0;
+	new->local_addr_gname = NULL;
+	new->blklst_addr_gname = NULL;
+	new->vip_bind_dev = NULL;
+	new->hash_target = 0;
+	new->bps = 0;
+	new->limit_proportion = 100;
+	memset(new->srange, 0, 256);
+	memset(new->drange, 0, 256);
+	memset(new->iifname, 0, IFNAMSIZ);
+	memset(new->oifname, 0, IFNAMSIZ);
+
 
 	list_add(check_data->vs, new);
+}
+
+/*local address group facility functions*/
+static void 
+free_laddr_group(void *data) 
+{
+    local_addr_group *laddr_group = (local_addr_group*)data;
+    FREE_PTR(laddr_group->gname);
+    free_list(&laddr_group->addr_ip);
+    free_list(&laddr_group->range);
+    FREE(laddr_group);
+}
+
+static void
+dump_laddr_group(FILE *fp, void *data)
+{
+	local_addr_group *laddr_group = data;
+
+	log_message(LOG_INFO, " local IP address group = %s", laddr_group->gname);
+	dump_list(fp, laddr_group->addr_ip);
+	dump_list(fp, laddr_group->range);
+}
+static void
+free_laddr_entry(void *data)
+{
+	FREE(data);
+}
+static void
+dump_laddr_entry(FILE *fp, void *data)
+{
+	local_addr_entry *laddr_entry = data;
+
+	if (laddr_entry->range)
+	    conf_write(fp, "   IP Range = %s-%d"
+				    , inet_sockaddrtos(&laddr_entry->addr)
+				    , laddr_entry->range);
+	else
+	    conf_write(fp, "   IP = %s"
+				    , inet_sockaddrtos(&laddr_entry->addr));
+}
+void
+alloc_laddr_group(char *gname)
+{
+	int size = strlen(gname);
+	local_addr_group *new;
+
+	new = (local_addr_group *) MALLOC(sizeof (local_addr_group));
+	new->gname = (char *) MALLOC(size + 1);
+	memcpy(new->gname, gname, size);
+	new->addr_ip = alloc_list(free_laddr_entry, dump_laddr_entry);
+	new->range = alloc_list(free_laddr_entry, dump_laddr_entry);
+
+	list_add(check_data->laddr_group, new);
+}
+void
+alloc_laddr_entry(vector_t *strvec)
+{
+	local_addr_group *laddr_group = LIST_TAIL_DATA(check_data->laddr_group);
+	local_addr_entry *new;
+
+	new = (local_addr_entry *) MALLOC(sizeof (local_addr_entry));
+
+	inet_stor(vector_slot(strvec, 0), &new->range);
+	/* If no range specified, new->range == UINT32_MAX */
+	if (new->range == UINT32_MAX)
+		new->range = 0;
+	inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
+	strncpy(new->ifname, vector_slot(strvec, 1), sizeof(new->ifname));
+
+	if (!new->range)
+		list_add(laddr_group->addr_ip, new);
+	else if ( (0 < new->range) && (new->range < 255) )
+		list_add(laddr_group->range, new);
+	else
+		log_message(LOG_INFO, "invalid: local IP address range %d", new->range);
+}
+
+/* blacklist IP address group facility functions */
+static void
+free_blklst_group(void *data)
+{
+	blklst_addr_group *blklst_group = data;
+	FREE_PTR(blklst_group->gname);
+	free_list(&blklst_group->addr_ip);
+	free_list(&blklst_group->range);
+	FREE(blklst_group);
+}
+
+static void
+dump_blklst_group(FILE *fp, void *data)
+{
+	blklst_addr_group *blklst_group = data;
+
+	log_message(LOG_INFO, " blacllist IP address group = %s", blklst_group->gname);
+	dump_list(fp, blklst_group->addr_ip);
+	dump_list(fp, blklst_group->range);
+}
+
+static void
+free_blklst_entry(void *data)
+{
+	FREE(data);
+}
+
+static void
+dump_blklst_entry(FILE *fp, void *data)
+{
+	blklst_addr_entry *blklst_entry = data;
+
+	if (blklst_entry->range)
+	    conf_write(fp, "   IP Range = %s-%d"
+			, inet_sockaddrtos(&blklst_entry->addr)
+			, blklst_entry->range);
+	else
+	    conf_write(fp, "   IP = %s"
+			, inet_sockaddrtos(&blklst_entry->addr));
+}
+
+void
+alloc_blklst_group(char *gname)
+{
+	int size = strlen(gname);
+	blklst_addr_group *new;
+
+	new = (blklst_addr_group *) MALLOC(sizeof (blklst_addr_group));
+	new->gname = (char *) MALLOC(size + 1);
+	memcpy(new->gname, gname, size);
+	new->addr_ip = alloc_list(free_blklst_entry, dump_blklst_entry);
+	new->range = alloc_list(free_blklst_entry, dump_blklst_entry);
+
+	list_add(check_data->blklst_group, new);
+}
+
+void
+alloc_blklst_entry(vector_t *strvec)
+{
+	blklst_addr_group *blklst_group = LIST_TAIL_DATA(check_data->blklst_group);
+	blklst_addr_entry *new;
+
+	new = (blklst_addr_entry *) MALLOC(sizeof (blklst_addr_entry));
+
+	inet_stor(vector_slot(strvec, 0), &new->range);
+	/* If no range specified, new->range == UINT32_MAX */
+	if (new->range == UINT32_MAX)
+		new->range = 0;
+	inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
+
+	if (!new->range)
+		list_add(blklst_group->addr_ip, new);
+	else if ( (0 < new->range) && (new->range < 255) )
+		list_add(blklst_group->range, new);
+	else
+		log_message(LOG_INFO, "invalid: blacklist IP address range %d", new->range);
 }
 
 /* Sorry server facility functions */
@@ -590,8 +805,8 @@ alloc_rs(const char *ip, const char *port)
 	}
 
 #ifndef LIBIPVS_USE_NL
-	if (new->addr.ss_family != AF_INET) {
-		report_config_error(CONFIG_GENERAL_ERROR, "IPVS does not support IPv6 in this build - skipping %s/%s", ip, port);
+	if (new->addr.ss_family != AF_INET && new->addr.ss_family != AF_INET6) {
+		report_config_error(CONFIG_GENERAL_ERROR, "IPVS does with IPv4 & ipV6 is supported only in this build - skipping %s/%s", ip, port);
 		skip_block(true);
 		FREE(new);
 		return;
@@ -599,10 +814,12 @@ alloc_rs(const char *ip, const char *port)
 #else
 #if !HAVE_DECL_IPVS_DEST_ATTR_ADDR_FAMILY
 	if (vs->af != AF_UNSPEC && new->addr.ss_family != vs->af) {
-		report_config_error(CONFIG_GENERAL_ERROR, "Your kernel doesn't support mixed IPv4/IPv6 for virtual/real servers");
-		skip_block(true);
-		FREE(new);
-		return;
+		if (!(new->addr.ss_family == AF_INET && vs->af == AF_INET6)) {
+			report_config_error(CONFIG_GENERAL_ERROR, "Your dpvs with NAT4to4 or NAT6to6 or NAT6to4 is supported only by this build");
+			skip_block(true);
+			FREE(new);
+			return;
+		}
 	}
 #endif
 #endif
@@ -671,6 +888,8 @@ alloc_check_data(void)
 #ifdef _WITH_BFD_
 	new->track_bfds = alloc_list(free_checker_bfd, dump_checker_bfd);
 #endif
+	new->laddr_group = alloc_list(free_laddr_group, dump_laddr_group);
+	new->blklst_group = alloc_list(free_blklst_group, dump_blklst_group);
 
 	return new;
 }
@@ -678,16 +897,20 @@ alloc_check_data(void)
 void
 free_check_data(check_data_t *data)
 {
+	if (!check_data)
+		return;
 	free_list(&data->vs);
 	free_list(&data->vs_group);
 #ifdef _WITH_BFD_
 	free_list(&data->track_bfds);
 #endif
+	free_list(&data->laddr_group);
+	free_list(&data->blklst_group);
 	FREE(data);
 }
 
-static void
-dump_check_data(FILE *fp, const check_data_t *data)
+void
+dump_check_data(FILE *fp, check_data_t *data)
 {
 	if (data->ssl) {
 		conf_write(fp, "------< SSL definitions >------");
@@ -697,6 +920,10 @@ dump_check_data(FILE *fp, const check_data_t *data)
 		conf_write(fp, "------< LVS Topology >------");
 		conf_write(fp, " System is compiled with LVS v%d.%d.%d",
 		       NVERSION(IP_VS_VERSION_CODE));
+		if (!LIST_ISEMPTY(data->laddr_group))
+			dump_list(fp, data->laddr_group);
+		if (!LIST_ISEMPTY(data->blklst_group))
+			dump_list(fp, data->blklst_group);
 		if (!LIST_ISEMPTY(data->vs_group))
 			dump_list(fp, data->vs_group);
 		dump_list(fp, data->vs);

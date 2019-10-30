@@ -81,6 +81,11 @@ extern void ipvs_syncd_cmd(int, const struct lvs_syncd_config *, int, bool, bool
 extern void ipvs_syncd_master(const struct lvs_syncd_config *);
 extern void ipvs_syncd_backup(const struct lvs_syncd_config *);
 #endif
+extern local_addr_group *ipvs_get_laddr_group_by_name(char *, list);
+extern int ipvs_laddr_remove_entry(virtual_server_t *, local_addr_entry *);
+extern blklst_addr_group *ipvs_get_blklst_group_by_name(char *, list);
+extern int ipvs_blklst_remove_entry(virtual_server_t *, blklst_addr_entry *);
+extern int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry);
 
 /* Refresh statistics at most every 5 seconds */
 #define STATS_REFRESH 5

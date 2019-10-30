@@ -77,7 +77,7 @@ add_link_local_address(interface_t *ifp, struct in6_addr* sin6_addr)
 	ipaddress.ifa.ifa_prefixlen = 64;
 	ipaddress.ifa.ifa_index = ifp->ifindex;
 
-	if (netlink_ipaddress(&ipaddress, IPADDRESS_ADD) != 1) {
+	if (netlink_ipaddress(&ipaddress, NULL, IPADDRESS_ADD) != 1) {
 		log_message(LOG_INFO, "Adding link-local address to vmac failed");
 		ifp->sin6_addr.s6_addr32[0] = 0;
 
@@ -113,13 +113,13 @@ replace_link_local_address(interface_t *ifp)
 	ipaddress.ifa.ifa_prefixlen = 64;
 	ipaddress.ifa.ifa_index = ifp->ifindex;
 
-	if (netlink_ipaddress(&ipaddress, IPADDRESS_DEL) != 1)
+	if (netlink_ipaddress(&ipaddress, NULL, IPADDRESS_DEL) != 1)
 		log_message(LOG_INFO, "Deleting link-local address from vmac failed");
 	else
 		ifp->sin6_addr.s6_addr32[0] = 0;
 
 	ipaddress.u.sin6_addr = ipaddress_new;
-	if (netlink_ipaddress(&ipaddress, IPADDRESS_ADD) != 1) {
+	if (netlink_ipaddress(&ipaddress, NULL, IPADDRESS_ADD) != 1) {
 		log_message(LOG_INFO, "Adding link-local address to vmac failed");
 		ifp->sin6_addr.s6_addr32[0] = 0;
 
@@ -148,13 +148,12 @@ remove_vmac_auto_gen_addr(interface_t *ifp, struct in6_addr *addr)
 	memset(&ipaddress, 0, sizeof(ipaddress));
 
 	ipaddress.ifp = ifp;
-	ipaddress.u.sin6_addr = *addr;
-
+	ipaddress.u.sin6_addr = *addr; 
 	ipaddress.ifa.ifa_family = AF_INET6;
 	ipaddress.ifa.ifa_prefixlen = 64;
 	ipaddress.ifa.ifa_index = ifp->ifindex;
 
-	if (netlink_ipaddress(&ipaddress, IPADDRESS_DEL) != 1)
+	if (netlink_ipaddress(&ipaddress, NULL, IPADDRESS_DEL) != 1)
 		log_message(LOG_INFO, "Deleting auto generated link-local address from vmac failed");
 }
 #endif
@@ -395,7 +394,7 @@ netlink_link_add_vmac(vrrp_t *vrrp)
 			ipaddress.ifa.ifa_prefixlen = 64;
 			ipaddress.ifa.ifa_index = vrrp->ifp->ifindex;
 
-			if (netlink_ipaddress(&ipaddress, IPADDRESS_ADD) != 1 && create_interface)
+			if (netlink_ipaddress(&ipaddress, NULL, IPADDRESS_ADD) != 1 && create_interface)
 				log_message(LOG_INFO, "Adding link-local address to vmac failed");
 		}
 	}
@@ -424,7 +423,7 @@ netlink_link_add_vmac(vrrp_t *vrrp)
 		ipaddress.ifa.ifa_index = vrrp->ifp->ifindex;
 		ipaddress.ifp = vrrp->ifp;
 
-		if (netlink_ipaddress(&ipaddress, IPADDRESS_DEL) != 1 && create_interface)
+		if (netlink_ipaddress(&ipaddress, NULL, IPADDRESS_DEL) != 1 && create_interface)
 			log_message(LOG_INFO, "Deleting auto link-local address from vmac failed");
 	}
 #endif
@@ -585,7 +584,7 @@ netlink_link_add_ipvlan(vrrp_t *vrrp)
 	kernel_netlink_poll();
 
 	if (vrrp->ipvlan_addr &&
-	    netlink_ipaddress(vrrp->ipvlan_addr, IPADDRESS_ADD) != 1)
+	    netlink_ipaddress(vrrp->ipvlan_addr, NULL, IPADDRESS_ADD) != 1)
 		log_message(LOG_INFO, "%s: Failed to add interface address to %s", vrrp->iname, ifp->ifname);
 
 	return true;

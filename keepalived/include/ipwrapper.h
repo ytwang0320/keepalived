@@ -40,6 +40,12 @@
 #define LVS_CMD_ADD_DEST	IP_VS_SO_SET_ADDDEST
 #define LVS_CMD_DEL_DEST	IP_VS_SO_SET_DELDEST
 #define LVS_CMD_EDIT_DEST	IP_VS_SO_SET_EDITDEST
+#define LVS_CMD_ADD_LADDR	IP_VS_SO_SET_ADDLADDR
+#define LVS_CMD_DEL_LADDR	IP_VS_SO_SET_DELLADDR
+#define LVS_CMD_ADD_BLKLST	IP_VS_SO_SET_ADDBLKLST
+#define LVS_CMD_DEL_BLKLST	IP_VS_SO_SET_DELBLKLST
+#define LVS_CMD_ADD_TUNNEL	IP_VS_SO_SET_ADDTUNNEL
+#define LVS_CMD_DEL_TUNNEL	IP_VS_SO_SET_DELTUNNEL
 
 /* prototypes */
 extern void update_svr_wgt(int, virtual_server_t *, real_server_t *, bool);
@@ -51,5 +57,10 @@ extern void set_quorum_states(void);
 extern void clear_diff_services(list);
 extern void check_new_rs_state(void);
 extern void link_vsg_to_vs(void);
+extern int svr_checker_up(bool, real_server_t *);
+extern int copy_srv_states(void);
+
+extern int init_tunnel(void);
+extern int clear_diff_tunnel(void);
 
 #endif
