@@ -88,7 +88,7 @@ extern bool do_parser_debug;
 extern bool do_dump_keywords;
 #endif
 
-static inline const char * __attribute__((malloc))
+static inline char * __attribute__((malloc))
 set_value_r(const vector_t *strvec)
 {
         return STRDUP(strvec_slot(strvec, 1));

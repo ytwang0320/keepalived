@@ -75,14 +75,13 @@ typedef struct ip_vs_blklst_entry       ipvs_blklst_entry_t;
 /* init socket and get ipvs info */
 extern int ipvs_init(void);
 
-extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
-extern int ipvs_del_tunnel(ipvs_tunnel_t * tunnel_entry);
-
 /* Set timeout parameters */
 extern int ipvs_set_timeout(ipvs_timeout_t *to);
 
 /* flush all the rules */
 extern int ipvs_flush(void);
+
+extern struct ip_vs_get_services_app *ipvs_get_services(void);
 
 /* add a virtual service */
 extern int ipvs_add_service(ipvs_service_t *svc);
@@ -111,7 +110,6 @@ extern int ipvs_update_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
 /* remove a destination server from a service */
 extern int ipvs_del_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
 
-#ifdef _INCLUDE_UNUSED_CODE_
 extern struct ip_vs_conn_array* ip_vs_get_conns(const struct ip_vs_conn_req *req);
 
 extern int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
@@ -125,7 +123,6 @@ extern int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
 /*for add/delete a tunnel*/
 extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
 extern int ipvs_del_tunnel(ipvs_tunnel_t * tunnel_entry);
-#endif
 
 /* start a connection synchronizaiton daemon (master/backup) */
 extern int ipvs_start_daemon(ipvs_daemon_t *dm);

@@ -60,14 +60,14 @@ static inline int parse_match(const char *pattern, uint8_t *proto,
                               struct dp_vs_match *match)
 {
     char _pat[256];
-    char *start, *tok, *sp, *delim = ",";
+    char *start, *tok, *sp;
     int err;
 
     *proto = 0;
     memset(match, 0, sizeof(*match));
     snprintf(_pat, sizeof(_pat), "%s", pattern);
 
-    for (start = _pat; (tok = strtok_r(start, delim, &sp)); start = NULL) {
+    for (start = _pat; (tok = strtok_r(start, ",", &sp)); start = NULL) {
         if (strcmp(tok, "tcp") == 0) {
             *proto = IPPROTO_TCP;
         } else if (strcmp(tok, "udp") == 0) {

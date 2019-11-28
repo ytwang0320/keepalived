@@ -1132,7 +1132,7 @@ open_pipe(int pipe_arr[2])
  * memcmp time constant variant.
  * Need to ensure compiler doesnt get too smart by optimizing generated asm code.
  */
-__attribute__((optimize("O0"))) int
+__attribute__((optimize("O0"))) int __attribute__ ((pure))
 memcmp_constant_time(const void *s1, const void *s2, size_t n)
 {
 	const unsigned char *a, *b;

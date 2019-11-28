@@ -52,9 +52,11 @@
 #include "parser.h"
 
 /* Buffer sizes for netlink messages. Increase if needed. */
+#if 0
 #define	RTM_SIZE		1024
 #define	RTA_SIZE		1024
 #define	ENCAP_RTA_SIZE		 128
+#endif
 
 /* Utility functions */
 unsigned short
@@ -318,7 +320,7 @@ static int flag_n2dpvs(int scope)
     return RTF_FORWARD;
 }
 
-void dpvs_fill_rt4conf(ip_route_t *iproute, struct dp_vs_route_conf *route_conf)
+static void dpvs_fill_rt4conf(ip_route_t *iproute, struct dp_vs_route_conf *route_conf)
 {
     route_conf->af = AF_INET;
     (route_conf->dst).in  = (iproute->dst->u).sin.sin_addr;
@@ -342,7 +344,7 @@ void dpvs_fill_rt4conf(ip_route_t *iproute, struct dp_vs_route_conf *route_conf)
     route_conf->metric = 0;
 }
 
-void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg) 
+static void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg) 
 {
     rt6_cfg->dst.addr = ((iproute->dst)->u).sin6_addr;
     rt6_cfg->dst.plen = iproute->dmask;
@@ -364,7 +366,7 @@ void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg)
     rt6_cfg->mtu = 0;
 }
 
-int
+static int
 netlink_route(ip_route_t *iproute, int cmd)
 {
     char *tmp_dst,*tmp_src;
@@ -1147,7 +1149,6 @@ void
 alloc_route(list rt_list, const vector_t *strvec, bool allow_track_group)
 {
 	ip_route_t *new;
-	interface_t *ifp;
 	const char *str;
 	uint32_t val;
 	uint8_t val8;

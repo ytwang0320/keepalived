@@ -330,7 +330,7 @@ void
 clear_services(void)
 {
 	if (!check_data)
-		return 0;
+		return;
 
 	element e;
 	virtual_server_t *vs;
@@ -832,7 +832,7 @@ clear_diff_vsg(virtual_server_t * old_vs, virtual_server_t * new_vs)
 
 /* Check if a vs exist in new data and returns pointer to it */
 static virtual_server_t* __attribute__ ((pure))
-vs_exist(virtual_server_t * old_vs, bool* empty_vsg)
+vs_exist(virtual_server_t * old_vs)
 {
 	element e;
 	virtual_server_t *vs;
@@ -1033,7 +1033,7 @@ clear_diff_s_srv(virtual_server_t *old_vs, real_server_t *new_rs)
 /* When reloading configuration, remove negative diff entries
  * and copy status of existing entries to the new ones */
 /* Check if a local address entry is in list */
-static int
+static int __attribute((pure))
 laddr_entry_exist(local_addr_entry *laddr_entry, list l)
 {
 	element e;
@@ -1102,7 +1102,7 @@ clear_diff_laddr(virtual_server_t * old_vs)
 }
 
 /* Check if a blacklist address entry is in list */
-static int
+static int __attribute((pure))
 blklst_entry_exist(blklst_addr_entry *blklst_entry, list l)
 {
         element e;
@@ -1174,7 +1174,6 @@ clear_diff_services(list old_checkers_queue)
 {
 	element e;
 	virtual_server_t *vs, *new_vs;
-	bool empty_vsg = false;
 
 	/* Remove diff entries from previous IPVS rules */
 	LIST_FOREACH(old_check_data->vs, vs, e) {
@@ -1182,11 +1181,9 @@ clear_diff_services(list old_checkers_queue)
 		 * Try to find this vs into the new conf data
 		 * reloaded.
 		 */
-		new_vs = vs_exist(vs, &empty_vsg);
+		new_vs = vs_exist(vs);
 		if (!new_vs) {
 			if (vs->vsgname) {
-				if (empty_vsg)
-					continue;
 				log_message(LOG_INFO, "Removing Virtual Server Group [%s]"
 						    , vs->vsgname);
 			}
@@ -1223,10 +1220,10 @@ clear_diff_services(list old_checkers_queue)
 			update_alive_counts(vs, new_vs);
 			/* perform local address diff */
 			if (!clear_diff_laddr(vs))
-				return 0;
+				return;
                         /* perform blacklist address diff */
                         if (!clear_diff_blklst(vs))
-                                return 0;
+                                return;
 		}
 	}
 }
@@ -1316,7 +1313,7 @@ link_vsg_to_vs(void)
 	}
 }
 
-static tunnel_group *
+static tunnel_group * __attribute((pure))
 get_tunnel_group_by_name(char *gname, list l)
 {
 	element e;
@@ -1334,7 +1331,7 @@ get_tunnel_group_by_name(char *gname, list l)
 	return NULL;
 }
 
-static int
+static int __attribute((pure))
 tunnel_entry_exist(tunnel_entry* old_entry, tunnel_group* new_group)
 {
 	element e;

@@ -175,25 +175,6 @@ static struct nla_policy ipvs_info_policy[IPVS_INFO_ATTR_MAX + 1] = {
 #endif
 #endif // LIBIPVS_USE_NL
 
-#define CHECK_IPV4(s, ret) if (s->af && s->af != AF_INET)	\
-	{ errno = EAFNOSUPPORT; goto out_err; }			\
-	s->user.addr = s->nf_addr.ip;				\
-
-#ifdef _HAVE_PE_NAME_
-#define CHECK_PE(s, ret) if (s->pe_name[0] != 0)		\
-	{ errno = EAFNOSUPPORT; goto out_err; }
-#endif // _HAVE_PE_NAME_
-
-#define CHECK_COMPAT_DEST(s, ret) CHECK_IPV4(s, ret)
-
-#ifdef _HAVE_PE_NAME_
-#define CHECK_COMPAT_SVC(s, ret)				\
-	CHECK_IPV4(s, ret);					\
-	CHECK_PE(s, ret);
-#else
-#define CHECK_COMPAT_SVC(s, ret)				\
-	CHECK_IPV4(s, ret);
-#endif //_HAVE_PE_NAME_
 
 #ifdef LIBIPVS_USE_NL
 #ifndef NLA_PUT_S32
@@ -207,8 +188,6 @@ nla_get_s32(struct nlattr *attr)
 }
 #endif // NLA_PUT_S32
 #endif // LIBIPVS_USE_NL
-
-#define CHECK_COMPAT_LADDR(s, ret) CHECK_IPV4(s, ret)
 
 
 /* ipv6 support */
@@ -801,17 +780,7 @@ out_err:
 	return NULL;
 }
 
-void ipvs_free_services(struct ip_vs_get_services_app *p)
-{
-	free(p);
-}
-
-void ipvs_free_service(ipvs_service_entry_t *p)
-{
-	free(p);
-}
-
-int
+int __attribute__ ((pure))
 ipvs_cmp_services(ipvs_service_entry_t *s1, ipvs_service_entry_t *s2)
 {
 	int r, i;
@@ -839,7 +808,8 @@ ipvs_cmp_services(ipvs_service_entry_t *s1, ipvs_service_entry_t *s2)
 	return ntohs(s1->user.port) - ntohs(s2->user.port);
 }
 
-int ipvs_cmp_dests(ipvs_dest_entry_t *d1, ipvs_dest_entry_t *d2)
+int __attribute__ ((pure))
+ipvs_cmp_dests(ipvs_dest_entry_t *d1, ipvs_dest_entry_t *d2)
 {
 	int r = 0, i;
 
@@ -1058,12 +1028,6 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
 
 	dpvs_sockopt_msg_free(result);
 	return laddrs;
-}
-
-
-void ipvs_free_lddrs(struct ip_vs_get_laddrs* p)
-{
-	free(p);
 }
 
 struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)

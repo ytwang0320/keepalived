@@ -145,7 +145,7 @@ vsg_handler(const vector_t *strvec)
 }
 
 static void
-laddr_group_handler(vector_t *strvec)
+laddr_group_handler(const vector_t *strvec)
 {
 	if (!strvec)
 		return;
@@ -955,28 +955,28 @@ vs_weight_handler(const vector_t *strvec)
 }
 
 static void 
-laddr_gname_handler(vector_t *strvec)
+laddr_gname_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	vs->local_addr_gname = set_value(strvec);
 }
 
 static void 
-syn_proxy_handler(vector_t *strvec)
+syn_proxy_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	vs->syn_proxy = 1;
 }
 
 static void
-bind_dev_handler(vector_t *strvec)
+bind_dev_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	vs->vip_bind_dev = set_value(strvec);
 }
 
 static void
-blklst_group_handler(vector_t *strvec)
+blklst_group_handler(const vector_t *strvec)
 {
 	if (!strvec)
 		return;
@@ -985,14 +985,14 @@ blklst_group_handler(vector_t *strvec)
 }
 
 static void
-blklst_gname_handler(vector_t *strvec)
+blklst_gname_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	vs->blklst_addr_gname = set_value(strvec);
 }
 
 static void
-bps_handler(vector_t *strvec)
+bps_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	char *str = vector_slot(strvec, 1);
@@ -1000,7 +1000,7 @@ bps_handler(vector_t *strvec)
 }
 
 static void
-limit_proportion_handler(vector_t *strvec)
+limit_proportion_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
     char *str = vector_slot(strvec, 1); 
@@ -1008,7 +1008,7 @@ limit_proportion_handler(vector_t *strvec)
 }
 
 static void
-establish_timeout_handler(vector_t *strvec)
+establish_timeout_handler(const vector_t *strvec)
 {
 	int conn_timeout;
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -1021,35 +1021,35 @@ establish_timeout_handler(vector_t *strvec)
 }
 
 static void
-src_range_handler(vector_t *strvec)
+src_range_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	snprintf(vs->srange, sizeof(vs->srange), "%s", (char *)vector_slot(strvec, 1));
 }
 
 static void
-dst_range_handler(vector_t *strvec)
+dst_range_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	snprintf(vs->drange, sizeof(vs->drange), "%s", (char *)vector_slot(strvec, 1));
 }
 
 static void
-oif_handler(vector_t *strvec)
+oif_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	snprintf(vs->oifname, sizeof(vs->oifname), "%s", (char *)vector_slot(strvec, 1));
 }
 
 static void
-iif_handler(vector_t *strvec)
+iif_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	snprintf(vs->iifname, sizeof(vs->iifname), "%s", (char *)vector_slot(strvec, 1));
 }
 
 static void
-hash_target_handler(vector_t *strvec)
+hash_target_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	char *str = vector_slot(strvec, 1);

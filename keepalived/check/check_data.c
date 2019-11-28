@@ -547,9 +547,9 @@ free_laddr_group(void *data)
 }
 
 static void
-dump_laddr_group(FILE *fp, void *data)
+dump_laddr_group(FILE *fp, const void *data)
 {
-	local_addr_group *laddr_group = data;
+	const local_addr_group *laddr_group = data;
 
 	log_message(LOG_INFO, " local IP address group = %s", laddr_group->gname);
 	dump_list(fp, laddr_group->addr_ip);
@@ -561,9 +561,9 @@ free_laddr_entry(void *data)
 	FREE(data);
 }
 static void
-dump_laddr_entry(FILE *fp, void *data)
+dump_laddr_entry(FILE *fp, const void *data)
 {
-	local_addr_entry *laddr_entry = data;
+	const local_addr_entry *laddr_entry = data;
 
 	if (laddr_entry->range)
 	    conf_write(fp, "   IP Range = %s-%d"
@@ -588,7 +588,7 @@ alloc_laddr_group(char *gname)
 	list_add(check_data->laddr_group, new);
 }
 void
-alloc_laddr_entry(vector_t *strvec)
+alloc_laddr_entry(const vector_t *strvec)
 {
 	local_addr_group *laddr_group = LIST_TAIL_DATA(check_data->laddr_group);
 	local_addr_entry *new;
@@ -622,9 +622,9 @@ free_blklst_group(void *data)
 }
 
 static void
-dump_blklst_group(FILE *fp, void *data)
+dump_blklst_group(FILE *fp, const void *data)
 {
-	blklst_addr_group *blklst_group = data;
+	const blklst_addr_group *blklst_group = data;
 
 	log_message(LOG_INFO, " blacllist IP address group = %s", blklst_group->gname);
 	dump_list(fp, blklst_group->addr_ip);
@@ -638,9 +638,9 @@ free_blklst_entry(void *data)
 }
 
 static void
-dump_blklst_entry(FILE *fp, void *data)
+dump_blklst_entry(FILE *fp, const void *data)
 {
-	blklst_addr_entry *blklst_entry = data;
+	const blklst_addr_entry *blklst_entry = data;
 
 	if (blklst_entry->range)
 	    conf_write(fp, "   IP Range = %s-%d"
@@ -667,7 +667,7 @@ alloc_blklst_group(char *gname)
 }
 
 void
-alloc_blklst_entry(vector_t *strvec)
+alloc_blklst_entry(const vector_t *strvec)
 {
 	blklst_addr_group *blklst_group = LIST_TAIL_DATA(check_data->blklst_group);
 	blklst_addr_entry *new;

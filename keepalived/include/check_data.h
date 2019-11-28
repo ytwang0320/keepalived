@@ -112,7 +112,7 @@ typedef struct _real_server {
 /* local ip address group definition */
 typedef struct _local_addr_entry {
 	struct sockaddr_storage addr;
-	uint8_t range;
+	uint32_t range;
 	char ifname[IFNAMSIZ];
 } local_addr_entry;
 
@@ -125,7 +125,7 @@ typedef struct _local_addr_group {
 /* blacklist ip group*/
 typedef struct _blklst_addr_entry {
         struct sockaddr_storage addr;
-        uint8_t range;
+        uint32_t range;
 } blklst_addr_entry;
 
 
@@ -298,13 +298,13 @@ extern const char *format_vsge (const virtual_server_group_entry_t *);
 extern const char *format_rs(const real_server_t *, const virtual_server_t *);
 extern bool validate_check_config(void);
 extern void alloc_laddr_group(char *);
-extern void alloc_laddr_entry(vector_t *);
+extern void alloc_laddr_entry(const vector_t *);
 extern void alloc_group(char *);
 extern void alloc_rsgroup(char *, char *);
 extern void set_rsgroup(char *);
 extern void dump_check_data(FILE *, check_data_t *);
 extern void alloc_blklst_group(char *);
-extern void alloc_blklst_entry(vector_t *);
+extern void alloc_blklst_entry(const vector_t *);
 
 extern void alloc_tunnel_entry(char *name);
 extern void alloc_tunnel(char *gname);

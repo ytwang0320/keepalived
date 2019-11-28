@@ -111,7 +111,7 @@ typedef struct _ip_address {
 struct ipt_handle;
 
 /* prototypes */
-extern const char *ipaddresstos(char *, const ip_address_t *);
+extern char *ipaddresstos(char *, const ip_address_t *);
 extern int netlink_ipaddress(ip_address_t *, char *, int);
 extern bool netlink_iplist(list, int, bool, char*);
 extern void free_ipaddress(void *);

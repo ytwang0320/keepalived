@@ -52,7 +52,9 @@
 #define	VERSION_STRING		PACKAGE_NAME " v" PACKAGE_VERSION " (" GIT_DATE ")"
 #define COPYRIGHT_STRING	"Copyright(C) 2001-" GIT_YEAR " Alexandre Cassen, <acassen@gmail.com>"
 
+#ifndef max
 #define max(a,b) ((a) >= (b) ? (a) : (b))
+#endif
 
 #ifdef _WITH_PERF_
 typedef enum {

@@ -97,7 +97,7 @@ struct _list {
 
 
 /* Prototypes */
-extern list alloc_mlist_r(void (*) (void *), void (*) (FILE *, const void *), size_t);
+extern list alloc_mlist_r(void (*) (void *), void (*) (FILE *, void *), size_t);
 #ifdef _VRRP_FD_DEBUG_
 extern void dump_mlist(FILE *, list, size_t);
 #endif

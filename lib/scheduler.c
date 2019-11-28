@@ -1852,7 +1852,8 @@ static void
 process_child_termination(pid_t pid, int status)
 {
 	thread_master_t * m = master;
-	thread_t th = { .u.c.pid = pid };
+	thread_t th = {0};
+	th.u.c.pid = pid ;
 	thread_t *thread;
 	bool permanent_vrrp_checker_error = false;
 

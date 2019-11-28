@@ -47,9 +47,9 @@
 #endif
 
 
-#define INFINITY_LIFE_TIME      0xFFFFFFFF
+//#define INFINITY_LIFE_TIME      0xFFFFFFFF
 
-const char *
+char *
 ipaddresstos(char *buf, const ip_address_t *ipaddress)
 {
 	static char addr_str[INET6_ADDRSTRLEN + 4];	/* allow for subnet */

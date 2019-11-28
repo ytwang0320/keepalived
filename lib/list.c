@@ -29,7 +29,7 @@
 
 /* Multiple list helpers functions */
 list
-alloc_mlist_r(void (*free_func) (void *), void (*dump_func) (FILE *, const void *), size_t size)
+alloc_mlist_r(void (*free_func) (void *), void (*dump_func) (FILE *, void *), size_t size)
 {
 	list new = (list) MALLOC(size * sizeof (struct _list));
 	new->free = free_func;
